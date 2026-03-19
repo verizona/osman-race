@@ -214,24 +214,70 @@
     function laneW() { return roadW() / laneCount(); }
 
     let gameRunning = false;
+    let gameOverPending = false;
     let score = 0;
     let baseSpeed = 5;
     let roadOffset = 0;
     let spawnTimer = 0;
     let lastTime = 0;
     let enemies = [];
+    let particles = [];
+    let explosion = null;
+    let flashAlpha = 0;
 
-    function laneCenter(lane) {
-      return roadX() + lane * laneW() + laneW() / 2;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function unlockAudio() {
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
     }
 
-    const player = {
-      lane: 1,
-      x: laneCenter(1),
-      y: () => H() - 120,
-      w: 56,
-      h: 96
-    };
+    function playBoomSound() {
+      unlockAudio();
+
+      const now = audioCtx.currentTime;
+
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+
+      osc1.type = "sawtooth";
+      osc1.frequency.setValueAtTime(140, now);
+      osc1.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+
+      gain1.gain.setValueAtTime(0.0001, now);
+      gain1.gain.exponentialRampToValueAtTime(0.7, now + 0.01);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+
+      osc1.connect(gain1).connect(audioCtx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.42);
+
+      const bufferSize = audioCtx.sampleRate * 0.45;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < bufferSize; i++) {
+        const decay = 1 - i / bufferSize;
+        data[i] = (Math.random() * 2 - 1) * decay * 0.7;
+      }
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = "lowpass";
+      noiseFilter.frequency.setValueAtTime(900, now);
+
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.8, now + 0.01);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+      noise.connect(noiseFilter).connect(noiseGain).connect(audioCtx.destination);
+      noise.start(now);
+      noise.stop(now + 0.46);
+    }
 
     function scaleX(v) {
       return v * (W() / BASE_W);
@@ -241,13 +287,29 @@
       return v * (H() / BASE_H);
     }
 
+    function laneCenter(lane) {
+      return roadX() + lane * laneW() + laneW() / 2;
+    }
+
+    const player = {
+      lane: 1,
+      x: laneCenter(1),
+      y: () => H() - scaleY(120),
+      w: () => scaleX(56),
+      h: () => scaleY(96)
+    };
+
     function resetGame() {
       gameRunning = true;
+      gameOverPending = false;
       score = 0;
       baseSpeed = 5;
       roadOffset = 0;
       spawnTimer = 0;
       enemies = [];
+      particles = [];
+      explosion = null;
+      flashAlpha = 0;
       player.lane = 1;
       player.x = laneCenter(1);
       scoreEl.textContent = "Score: 0";
@@ -380,51 +442,178 @@
       );
     }
 
-    function endGame() {
+    function createExplosion(x, y) {
+      explosion = {
+        x,
+        y,
+        radius: scaleX(12),
+        maxRadius: scaleX(85),
+        life: 0.55,
+        age: 0
+      };
+
+      particles = [];
+
+      for (let i = 0; i < 38; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = scaleX(2 + Math.random() * 7);
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - Math.random() * scaleY(1.2),
+          life: 0.9 + Math.random() * 0.5,
+          age: 0,
+          size: scaleX(3 + Math.random() * 6),
+          color: ["#ffcc33", "#ff7a00", "#ff3b30", "#ffd966", "#ffffff"][Math.floor(Math.random() * 5)]
+        });
+      }
+
+      flashAlpha = 0.85;
+      playBoomSound();
+    }
+
+    function endGame(crashX, crashY) {
+      if (gameOverPending) return;
       gameRunning = false;
+      gameOverPending = true;
+      createExplosion(crashX, crashY);
+    }
+
+    function finishGameOver() {
       finalScoreEl.textContent = `Score: ${score}`;
       gameOverOverlay.classList.remove("hidden");
+      gameOverPending = false;
+    }
+
+    function updateExplosion(dtSeconds) {
+      if (explosion) {
+        explosion.age += dtSeconds;
+        const t = Math.min(1, explosion.age / explosion.life);
+        explosion.radius = explosion.maxRadius * t;
+
+        if (explosion.age >= explosion.life) {
+          explosion = null;
+          if (particles.length === 0 && gameOverPending) {
+            finishGameOver();
+          }
+        }
+      }
+
+      if (particles.length > 0) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.age += dtSeconds;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += scaleY(0.08);
+          p.vx *= 0.992;
+
+          if (p.age >= p.life) {
+            particles.splice(i, 1);
+          }
+        }
+      }
+
+      if (!explosion && particles.length === 0 && gameOverPending) {
+        finishGameOver();
+      }
+
+      if (flashAlpha > 0) {
+        flashAlpha -= dtSeconds * 2.2;
+        if (flashAlpha < 0) flashAlpha = 0;
+      }
+    }
+
+    function drawExplosion() {
+      if (explosion) {
+        const progress = explosion.age / explosion.life;
+        const alpha = Math.max(0, 1 - progress);
+
+        const grad = ctx.createRadialGradient(
+          explosion.x, explosion.y, scaleX(4),
+          explosion.x, explosion.y, explosion.radius
+        );
+        grad.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`);
+        grad.addColorStop(0.25, `rgba(255,220,120,${0.95 * alpha})`);
+        grad.addColorStop(0.55, `rgba(255,120,0,${0.8 * alpha})`);
+        grad.addColorStop(1, `rgba(255,0,0,0)`);
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const p of particles) {
+        const alpha = Math.max(0, 1 - p.age / p.life);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      if (flashAlpha > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.45})`;
+        ctx.fillRect(0, 0, W(), H());
+      }
     }
 
     function update(dt) {
-      roadOffset = (roadOffset + baseSpeed) % scaleY(70);
-      spawnTimer += dt;
+      const dtSeconds = dt / 1000;
 
-      if (spawnTimer > Math.max(420, 950 - score * 7)) {
-        spawnTimer = 0;
-        if (enemies.length < 7) spawnEnemy();
-      }
+      if (gameRunning) {
+        roadOffset = (roadOffset + baseSpeed) % scaleY(70);
+        spawnTimer += dt;
 
-      const playerBox = {
-        x: player.x,
-        y: player.y(),
-        w: scaleX(56),
-        h: scaleY(96)
-      };
-
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        enemies[i].y += enemies[i].speed;
-
-        if (rectsCollide(playerBox, enemies[i])) {
-          endGame();
-          return;
+        if (spawnTimer > Math.max(420, 950 - score * 7)) {
+          spawnTimer = 0;
+          if (enemies.length < 7) spawnEnemy();
         }
 
-        if (enemies[i].y - enemies[i].h / 2 > H()) {
-          enemies.splice(i, 1);
-          score += 1;
-          if (score % 5 === 0) baseSpeed += 0.35;
+        const playerBox = {
+          x: player.x,
+          y: player.y(),
+          w: player.w(),
+          h: player.h()
+        };
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          enemies[i].y += enemies[i].speed;
+
+          if (rectsCollide(playerBox, enemies[i])) {
+            endGame(player.x, player.y());
+            return;
+          }
+
+          if (enemies[i].y - enemies[i].h / 2 > H()) {
+            enemies.splice(i, 1);
+            score += 1;
+            if (score % 5 === 0) baseSpeed += 0.35;
+          }
         }
+
+        scoreEl.textContent = `Score: ${score}`;
+        speedEl.textContent = `Speed: ${Math.max(1, Math.round(baseSpeed - 4))}`;
       }
 
-      scoreEl.textContent = `Score: ${score}`;
-      speedEl.textContent = `Speed: ${Math.max(1, Math.round(baseSpeed - 4))}`;
+      if (explosion || particles.length > 0 || flashAlpha > 0) {
+        updateExplosion(dtSeconds);
+      }
     }
 
     function draw() {
       drawRoad();
-      drawCar(player.x, player.y(), "#2563eb", "OSMAN", true);
+
       enemies.forEach(e => drawCar(e.x, e.y, e.color));
+
+      if (!explosion) {
+        drawCar(player.x, player.y(), "#2563eb", "OSMAN", true);
+      }
+
+      drawExplosion();
     }
 
     function loop(ts) {
@@ -432,9 +621,7 @@
       const dt = ts - lastTime;
       lastTime = ts;
 
-      if (gameRunning) {
-        update(dt);
-      }
+      update(dt);
       draw();
       requestAnimationFrame(loop);
     }
@@ -446,23 +633,36 @@
 
     leftBtn.addEventListener("touchstart", (e) => {
       e.preventDefault();
+      unlockAudio();
       moveLeft();
     }, { passive: false });
 
     rightBtn.addEventListener("touchstart", (e) => {
       e.preventDefault();
+      unlockAudio();
       moveRight();
     }, { passive: false });
 
-    leftBtn.addEventListener("click", moveLeft);
-    rightBtn.addEventListener("click", moveRight);
+    leftBtn.addEventListener("click", () => {
+      unlockAudio();
+      moveLeft();
+    });
+
+    rightBtn.addEventListener("click", () => {
+      unlockAudio();
+      moveRight();
+    });
 
     startBtn.addEventListener("click", () => {
+      unlockAudio();
       startOverlay.classList.add("hidden");
       resetGame();
     });
 
-    restartBtn.addEventListener("click", resetGame);
+    restartBtn.addEventListener("click", () => {
+      unlockAudio();
+      resetGame();
+    });
 
     draw();
     requestAnimationFrame(loop);
