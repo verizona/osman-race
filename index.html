@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Osman Race</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111827;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      touch-action: manipulation;
+    }
+
+    #game {
+      display: block;
+      margin: 0 auto;
+      background: linear-gradient(#87ceeb, #d7f0ff 35%, #6b7280 35%, #6b7280 100%);
+    }
+
+    .hud {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      color: white;
+      font-weight: bold;
+      z-index: 10;
+      pointer-events: none;
+      text-shadow: 0 2px 4px rgba(0,0,0,.6);
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.45);
+      z-index: 20;
+    }
+
+    .panel {
+      width: min(92vw, 420px);
+      background: rgba(17, 24, 39, 0.95);
+      color: white;
+      border-radius: 20px;
+      padding: 22px;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,.35);
+    }
+
+    .panel h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+    }
+
+    .panel p {
+      margin: 8px 0;
+      color: #d1d5db;
+      line-height: 1.4;
+    }
+
+    .btn {
+      margin-top: 16px;
+      border: 0;
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 18px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      z-index: 15;
+    }
+
+    .ctrl {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      border: 0;
+      font-size: 32px;
+      font-weight: bold;
+      color: white;
+      background: rgba(31, 41, 55, 0.85);
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    <div id="score">Score: 0</div>
+    <div id="speed">Speed: 1</div>
+  </div>
+
+  <canvas id="game" width="420" height="740"></canvas>
+
+  <div class="controls">
+    <button class="ctrl" id="leftBtn">◀</button>
+    <button class="ctrl" id="rightBtn">▶</button>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <h1>OSMAN RACE</h1>
+      <p>Desktop: use left/right arrow keys</p>
+      <p>Phone: use the buttons at the bottom</p>
+      <p>Avoid traffic and survive as long as you can.</p>
+      <button class="btn" id="startBtn">Start Game</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <h1>Game Over</h1>
+      <p id="finalScore">Score: 0</p>
+      <button class="btn" id="restartBtn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const speedEl = document.getElementById("speed");
+    const startOverlay = document.getElementById("startOverlay");
+    const gameOverOverlay = document.getElementById("gameOverOverlay");
+    const finalScoreEl = document.getElementById("finalScore");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const leftBtn = document.getElementById("leftBtn");
+    const rightBtn = document.getElementById("rightBtn");
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const ROAD_X = 70;
+    const ROAD_W = 280;
+    const LANE_COUNT = 3;
+    const LANE_W = ROAD_W / LANE_COUNT;
+
+    let gameRunning = false;
+    let score = 0;
+    let baseSpeed = 5;
+    let roadOffset = 0;
+    let spawnTimer = 0;
+    let lastTime = 0;
+    let enemies = [];
+
+    function laneCenter(lane) {
+      return ROAD_X + lane * LANE_W + LANE_W / 2;
+    }
+
+    const player = {
+      lane: 1,
+      x: laneCenter(1),
+      y: H - 120,
+      w: 56,
+      h: 96
+    };
+
+    function resetGame() {
+      gameRunning = true;
+      score = 0;
+      baseSpeed = 5;
+      roadOffset = 0;
+      spawnTimer = 0;
+      enemies = [];
+      player.lane = 1;
+      player.x = laneCenter(1);
+      scoreEl.textContent = "Score: 0";
+      speedEl.textContent = "Speed: 1";
+      gameOverOverlay.classList.add("hidden");
+    }
+
+    function moveLeft() {
+      if (!gameRunning) return;
+      if (player.lane > 0) {
+        player.lane -= 1;
+        player.x = laneCenter(player.lane);
+      }
+    }
+
+    function moveRight() {
+      if (!gameRunning) return;
+      if (player.lane < LANE_COUNT - 1) {
+        player.lane += 1;
+        player.x = laneCenter(player.lane);
+      }
+    }
+
+    function drawRoad() {
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.fillStyle = "#4ade80";
+      ctx.fillRect(0, 0, ROAD_X, H);
+      ctx.fillRect(ROAD_X + ROAD_W, 0, W - (ROAD_X + ROAD_W), H);
+
+      ctx.fillStyle = "#52525b";
+      ctx.fillRect(ROAD_X, 0, ROAD_W, H);
+
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(ROAD_X, 0);
+      ctx.lineTo(ROAD_X, H);
+      ctx.moveTo(ROAD_X + ROAD_W, 0);
+      ctx.lineTo(ROAD_X + ROAD_W, H);
+      ctx.stroke();
+
+      ctx.fillStyle = "#fde047";
+      for (let lane = 1; lane < LANE_COUNT; lane++) {
+        const x = ROAD_X + lane * LANE_W - 3;
+        for (let y = -roadOffset; y < H; y += 70) {
+          ctx.fillRect(x, y, 6, 42);
+        }
+      }
+    }
+
+    function drawCar(x, y, color, label = "", isPlayer = false) {
+      const w = 56;
+      const h = 96;
+      const left = x - w / 2;
+      const top = y - h / 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      roundRect(ctx, left + 5, top + 6, w, h, 12, true, false);
+
+      ctx.fillStyle = color;
+      roundRect(ctx, left, top, w, h, 12, true, false);
+
+      ctx.fillStyle = "#bfe3ff";
+      roundRect(ctx, left + 10, top + 12, w - 20, 22, 8, true, false);
+      roundRect(ctx, left + 10, top + 60, w - 20, 16, 8, true, false);
+
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(left - 3, top + 14, 8, 20);
+      ctx.fillRect(left - 3, top + h - 34, 8, 20);
+      ctx.fillRect(left + w - 5, top + 14, 8, 20);
+      ctx.fillRect(left + w - 5, top + h - 34, 8, 20);
+
+      ctx.fillStyle = "#fde047";
+      circle(left + 12, top + 10, 5);
+      circle(left + w - 12, top + 10, 5);
+
+      ctx.fillStyle = isPlayer ? "#ffffff" : "#ef4444";
+      circle(left + 12, top + h - 10, 5);
+      circle(left + w - 12, top + h - 10, 5);
+
+      if (label) {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 18px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(label, x, y + 6);
+      }
+    }
+
+    function circle(x, y, r) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+      if (typeof r === "number") {
+        r = { tl: r, tr: r, br: r, bl: r };
+      }
+      ctx.beginPath();
+      ctx.moveTo(x + r.tl, y);
+      ctx.lineTo(x + w - r.tr, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+      ctx.lineTo(x + w, y + h - r.br);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+      ctx.lineTo(x + r.bl, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+      ctx.lineTo(x, y + r.tl);
+      ctx.quadraticCurveTo(x, y, x + r.tl, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    function spawnEnemy() {
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      enemies.push({
+        lane,
+        x: laneCenter(lane),
+        y: -110,
+        w: 56,
+        h: 96,
+        speed: baseSpeed + 2 + Math.random() * 1.5,
+        color: ["#ef4444", "#f97316", "#8b5cf6", "#06b6d4"][Math.floor(Math.random() * 4)]
+      });
+    }
+
+    function rectsCollide(a, b) {
+      return !(
+        a.x + a.w / 2 < b.x - b.w / 2 ||
+        a.x - a.w / 2 > b.x + b.w / 2 ||
+        a.y + a.h / 2 < b.y - b.h / 2 ||
+        a.y - a.h / 2 > b.y + b.h / 2
+      );
+    }
+
+    function endGame() {
+      gameRunning = false;
+      finalScoreEl.textContent = `Score: ${score}`;
+      gameOverOverlay.classList.remove("hidden");
+    }
+
+    function update(dt) {
+      roadOffset = (roadOffset + baseSpeed) % 70;
+      spawnTimer += dt;
+
+      if (spawnTimer > Math.max(420, 950 - score * 7)) {
+        spawnTimer = 0;
+        if (enemies.length < 7) spawnEnemy();
+      }
+
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        enemies[i].y += enemies[i].speed;
+
+        if (rectsCollide(player, enemies[i])) {
+          endGame();
+          return;
+        }
+
+        if (enemies[i].y - enemies[i].h / 2 > H) {
+          enemies.splice(i, 1);
+          score += 1;
+          if (score % 5 === 0) baseSpeed += 0.35;
+        }
+      }
+
+      scoreEl.textContent = `Score: ${score}`;
+      speedEl.textContent = `Speed: ${Math.max(1, Math.round(baseSpeed - 4))}`;
+    }
+
+    function draw() {
+      drawRoad();
+      drawCar(player.x, player.y, "#2563eb", "OSMAN", true);
+      enemies.forEach(e => drawCar(e.x, e.y, e.color));
+    }
+
+    function loop(ts) {
+      if (!lastTime) lastTime = ts;
+      const dt = ts - lastTime;
+      lastTime = ts;
+
+      if (gameRunning) {
+        update(dt);
+        draw();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") moveLeft();
+      if (e.key === "ArrowRight") moveRight();
+    });
+
+    leftBtn.addEventListener("touchstart", (e) => { e.preventDefault(); moveLeft(); }, { passive: false });
+    rightBtn.addEventListener("touchstart", (e) => { e.preventDefault(); moveRight(); }, { passive: false });
+    leftBtn.addEventListener("click", moveLeft);
+    rightBtn.addEventListener("click", moveRight);
+
+    startBtn.addEventListener("click", () => {
+      startOverlay.classList.add("hidden");
+      resetGame();
+    });
+
+    restartBtn.addEventListener("click", resetGame);
+
+    draw();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
