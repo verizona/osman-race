@@ -2,26 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
   <title>Osman Race</title>
   <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(10, 18, 34, 0.9);
+      --text: #ffffff;
+      --muted: #d1d5db;
+      --btn: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
-      background: #111827;
+      background: var(--bg);
       overflow: hidden;
       font-family: Arial, sans-serif;
       touch-action: manipulation;
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #gameWrap {
+      position: relative;
+      width: min(100vw, 420px);
+      height: 100vh;
+      max-height: 100vh;
+      background: #0b1220;
+      overflow: hidden;
     }
 
     #game {
       display: block;
-      margin: 0 auto;
+      width: 100%;
+      height: 100%;
       background: linear-gradient(#87ceeb, #d7f0ff 35%, #6b7280 35%, #6b7280 100%);
     }
 
     .hud {
-      position: fixed;
+      position: absolute;
       top: 10px;
       left: 10px;
       right: 10px;
@@ -32,60 +65,65 @@
       z-index: 10;
       pointer-events: none;
       text-shadow: 0 2px 4px rgba(0,0,0,.6);
+      font-size: 18px;
     }
 
     .overlay {
-      position: fixed;
+      position: absolute;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0,0,0,.45);
+      background: rgba(0,0,0,.35);
       z-index: 20;
+      padding: 18px;
     }
 
     .panel {
-      width: min(92vw, 420px);
-      background: rgba(17, 24, 39, 0.95);
-      color: white;
-      border-radius: 20px;
-      padding: 22px;
+      width: 100%;
+      max-width: 360px;
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 24px;
+      padding: 24px 20px;
       text-align: center;
       box-shadow: 0 10px 40px rgba(0,0,0,.35);
     }
 
     .panel h1 {
-      margin: 0 0 10px;
+      margin: 0 0 12px;
       font-size: 34px;
     }
 
     .panel p {
-      margin: 8px 0;
-      color: #d1d5db;
+      margin: 10px 0;
+      color: var(--muted);
       line-height: 1.4;
+      font-size: 16px;
     }
 
     .btn {
       margin-top: 16px;
       border: 0;
-      border-radius: 12px;
-      padding: 14px 20px;
-      font-size: 18px;
+      border-radius: 14px;
+      padding: 14px 24px;
+      font-size: 22px;
       font-weight: bold;
       cursor: pointer;
-      background: #2563eb;
+      background: var(--btn);
       color: white;
     }
 
     .controls {
-      position: fixed;
-      bottom: 18px;
+      position: absolute;
+      bottom: 16px;
       left: 0;
       right: 0;
       display: flex;
       justify-content: center;
       gap: 18px;
       z-index: 15;
+      padding-bottom: env(safe-area-inset-bottom, 0);
     }
 
     .ctrl {
@@ -96,7 +134,7 @@
       font-size: 32px;
       font-weight: bold;
       color: white;
-      background: rgba(31, 41, 55, 0.85);
+      background: rgba(17, 24, 39, 0.88);
       box-shadow: 0 6px 20px rgba(0,0,0,.25);
       user-select: none;
       -webkit-user-select: none;
@@ -108,33 +146,35 @@
   </style>
 </head>
 <body>
-  <div class="hud">
-    <div id="score">Score: 0</div>
-    <div id="speed">Speed: 1</div>
-  </div>
-
-  <canvas id="game" width="420" height="740"></canvas>
-
-  <div class="controls">
-    <button class="ctrl" id="leftBtn">◀</button>
-    <button class="ctrl" id="rightBtn">▶</button>
-  </div>
-
-  <div class="overlay" id="startOverlay">
-    <div class="panel">
-      <h1>OSMAN RACE</h1>
-      <p>Desktop: use left/right arrow keys</p>
-      <p>Phone: use the buttons at the bottom</p>
-      <p>Avoid traffic and survive as long as you can.</p>
-      <button class="btn" id="startBtn">Start Game</button>
+  <div id="gameWrap">
+    <div class="hud">
+      <div id="score">Score: 0</div>
+      <div id="speed">Speed: 1</div>
     </div>
-  </div>
 
-  <div class="overlay hidden" id="gameOverOverlay">
-    <div class="panel">
-      <h1>Game Over</h1>
-      <p id="finalScore">Score: 0</p>
-      <button class="btn" id="restartBtn">Play Again</button>
+    <canvas id="game"></canvas>
+
+    <div class="controls">
+      <button class="ctrl" id="leftBtn">◀</button>
+      <button class="ctrl" id="rightBtn">▶</button>
+    </div>
+
+    <div class="overlay" id="startOverlay">
+      <div class="panel">
+        <h1>OSMAN RACE</h1>
+        <p>Desktop: use left/right arrow keys</p>
+        <p>Phone: use the buttons at the bottom</p>
+        <p>Avoid traffic and survive as long as you can.</p>
+        <button class="btn" id="startBtn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="gameOverOverlay">
+      <div class="panel">
+        <h1>Game Over</h1>
+        <p id="finalScore">Score: 0</p>
+        <button class="btn" id="restartBtn">Play Again</button>
+      </div>
     </div>
   </div>
 
@@ -142,6 +182,7 @@
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
+    const wrap = document.getElementById("gameWrap");
     const scoreEl = document.getElementById("score");
     const speedEl = document.getElementById("speed");
     const startOverlay = document.getElementById("startOverlay");
@@ -152,13 +193,25 @@
     const leftBtn = document.getElementById("leftBtn");
     const rightBtn = document.getElementById("rightBtn");
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const BASE_W = 420;
+    const BASE_H = 740;
 
-    const ROAD_X = 70;
-    const ROAD_W = 280;
-    const LANE_COUNT = 3;
-    const LANE_W = ROAD_W / LANE_COUNT;
+    function resizeCanvas() {
+      const rect = wrap.getBoundingClientRect();
+      canvas.width = Math.max(320, Math.floor(rect.width));
+      canvas.height = Math.max(560, Math.floor(rect.height));
+    }
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    function W() { return canvas.width; }
+    function H() { return canvas.height; }
+
+    function roadX() { return W() * 0.17; }
+    function roadW() { return W() * 0.66; }
+    function laneCount() { return 3; }
+    function laneW() { return roadW() / laneCount(); }
 
     let gameRunning = false;
     let score = 0;
@@ -169,16 +222,24 @@
     let enemies = [];
 
     function laneCenter(lane) {
-      return ROAD_X + lane * LANE_W + LANE_W / 2;
+      return roadX() + lane * laneW() + laneW() / 2;
     }
 
     const player = {
       lane: 1,
       x: laneCenter(1),
-      y: H - 120,
+      y: () => H() - 120,
       w: 56,
       h: 96
     };
+
+    function scaleX(v) {
+      return v * (W() / BASE_W);
+    }
+
+    function scaleY(v) {
+      return v * (H() / BASE_H);
+    }
 
     function resetGame() {
       gameRunning = true;
@@ -204,75 +265,37 @@
 
     function moveRight() {
       if (!gameRunning) return;
-      if (player.lane < LANE_COUNT - 1) {
+      if (player.lane < laneCount() - 1) {
         player.lane += 1;
         player.x = laneCenter(player.lane);
       }
     }
 
     function drawRoad() {
-      ctx.clearRect(0, 0, W, H);
+      ctx.clearRect(0, 0, W(), H());
 
       ctx.fillStyle = "#4ade80";
-      ctx.fillRect(0, 0, ROAD_X, H);
-      ctx.fillRect(ROAD_X + ROAD_W, 0, W - (ROAD_X + ROAD_W), H);
+      ctx.fillRect(0, 0, roadX(), H());
+      ctx.fillRect(roadX() + roadW(), 0, W() - (roadX() + roadW()), H());
 
-      ctx.fillStyle = "#52525b";
-      ctx.fillRect(ROAD_X, 0, ROAD_W, H);
+      ctx.fillStyle = "#31323a";
+      ctx.fillRect(roadX(), 0, roadW(), H());
 
       ctx.strokeStyle = "#e5e7eb";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = scaleX(4);
       ctx.beginPath();
-      ctx.moveTo(ROAD_X, 0);
-      ctx.lineTo(ROAD_X, H);
-      ctx.moveTo(ROAD_X + ROAD_W, 0);
-      ctx.lineTo(ROAD_X + ROAD_W, H);
+      ctx.moveTo(roadX(), 0);
+      ctx.lineTo(roadX(), H());
+      ctx.moveTo(roadX() + roadW(), 0);
+      ctx.lineTo(roadX() + roadW(), H());
       ctx.stroke();
 
-      ctx.fillStyle = "#fde047";
-      for (let lane = 1; lane < LANE_COUNT; lane++) {
-        const x = ROAD_X + lane * LANE_W - 3;
-        for (let y = -roadOffset; y < H; y += 70) {
-          ctx.fillRect(x, y, 6, 42);
+      ctx.fillStyle = "#b59f2e";
+      for (let lane = 1; lane < laneCount(); lane++) {
+        const x = roadX() + lane * laneW() - scaleX(3);
+        for (let y = -roadOffset; y < H(); y += scaleY(70)) {
+          ctx.fillRect(x, y, scaleX(6), scaleY(42));
         }
-      }
-    }
-
-    function drawCar(x, y, color, label = "", isPlayer = false) {
-      const w = 56;
-      const h = 96;
-      const left = x - w / 2;
-      const top = y - h / 2;
-
-      ctx.fillStyle = "rgba(0,0,0,0.18)";
-      roundRect(ctx, left + 5, top + 6, w, h, 12, true, false);
-
-      ctx.fillStyle = color;
-      roundRect(ctx, left, top, w, h, 12, true, false);
-
-      ctx.fillStyle = "#bfe3ff";
-      roundRect(ctx, left + 10, top + 12, w - 20, 22, 8, true, false);
-      roundRect(ctx, left + 10, top + 60, w - 20, 16, 8, true, false);
-
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(left - 3, top + 14, 8, 20);
-      ctx.fillRect(left - 3, top + h - 34, 8, 20);
-      ctx.fillRect(left + w - 5, top + 14, 8, 20);
-      ctx.fillRect(left + w - 5, top + h - 34, 8, 20);
-
-      ctx.fillStyle = "#fde047";
-      circle(left + 12, top + 10, 5);
-      circle(left + w - 12, top + 10, 5);
-
-      ctx.fillStyle = isPlayer ? "#ffffff" : "#ef4444";
-      circle(left + 12, top + h - 10, 5);
-      circle(left + w - 12, top + h - 10, 5);
-
-      if (label) {
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 18px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(label, x, y + 6);
       }
     }
 
@@ -282,33 +305,67 @@
       ctx.fill();
     }
 
-    function roundRect(ctx, x, y, w, h, r, fill, stroke) {
-      if (typeof r === "number") {
-        r = { tl: r, tr: r, br: r, bl: r };
-      }
+    function roundRect(ctx, x, y, w, h, r, fill) {
       ctx.beginPath();
-      ctx.moveTo(x + r.tl, y);
-      ctx.lineTo(x + w - r.tr, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-      ctx.lineTo(x + w, y + h - r.br);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-      ctx.lineTo(x + r.bl, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-      ctx.lineTo(x, y + r.tl);
-      ctx.quadraticCurveTo(x, y, x + r.tl, y);
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
       ctx.closePath();
       if (fill) ctx.fill();
-      if (stroke) ctx.stroke();
+    }
+
+    function drawCar(x, y, color, label = "", isPlayer = false) {
+      const w = scaleX(56);
+      const h = scaleY(96);
+      const left = x - w / 2;
+      const top = y - h / 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      roundRect(ctx, left + scaleX(5), top + scaleY(6), w, h, scaleX(12), true);
+
+      ctx.fillStyle = color;
+      roundRect(ctx, left, top, w, h, scaleX(12), true);
+
+      ctx.fillStyle = "#9ab6d6";
+      roundRect(ctx, left + scaleX(10), top + scaleY(12), w - scaleX(20), scaleY(22), scaleX(8), true);
+      roundRect(ctx, left + scaleX(10), top + scaleY(60), w - scaleX(20), scaleY(16), scaleX(8), true);
+
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(left - scaleX(3), top + scaleY(14), scaleX(8), scaleY(20));
+      ctx.fillRect(left - scaleX(3), top + h - scaleY(34), scaleX(8), scaleY(20));
+      ctx.fillRect(left + w - scaleX(5), top + scaleY(14), scaleX(8), scaleY(20));
+      ctx.fillRect(left + w - scaleX(5), top + h - scaleY(34), scaleX(8), scaleY(20));
+
+      ctx.fillStyle = "#b59f2e";
+      circle(left + scaleX(12), top + scaleY(10), scaleX(5));
+      circle(left + w - scaleX(12), top + scaleY(10), scaleX(5));
+
+      ctx.fillStyle = isPlayer ? "#ffffff" : "#ef4444";
+      circle(left + scaleX(12), top + h - scaleY(10), scaleX(5));
+      circle(left + w - scaleX(12), top + h - scaleY(10), scaleX(5));
+
+      if (label) {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold ${Math.max(12, Math.floor(scaleX(18)))}px Arial`;
+        ctx.textAlign = "center";
+        ctx.fillText(label, x, y + scaleY(6));
+      }
     }
 
     function spawnEnemy() {
-      const lane = Math.floor(Math.random() * LANE_COUNT);
+      const lane = Math.floor(Math.random() * laneCount());
       enemies.push({
         lane,
         x: laneCenter(lane),
-        y: -110,
-        w: 56,
-        h: 96,
+        y: -scaleY(110),
+        w: scaleX(56),
+        h: scaleY(96),
         speed: baseSpeed + 2 + Math.random() * 1.5,
         color: ["#ef4444", "#f97316", "#8b5cf6", "#06b6d4"][Math.floor(Math.random() * 4)]
       });
@@ -330,7 +387,7 @@
     }
 
     function update(dt) {
-      roadOffset = (roadOffset + baseSpeed) % 70;
+      roadOffset = (roadOffset + baseSpeed) % scaleY(70);
       spawnTimer += dt;
 
       if (spawnTimer > Math.max(420, 950 - score * 7)) {
@@ -338,15 +395,22 @@
         if (enemies.length < 7) spawnEnemy();
       }
 
+      const playerBox = {
+        x: player.x,
+        y: player.y(),
+        w: scaleX(56),
+        h: scaleY(96)
+      };
+
       for (let i = enemies.length - 1; i >= 0; i--) {
         enemies[i].y += enemies[i].speed;
 
-        if (rectsCollide(player, enemies[i])) {
+        if (rectsCollide(playerBox, enemies[i])) {
           endGame();
           return;
         }
 
-        if (enemies[i].y - enemies[i].h / 2 > H) {
+        if (enemies[i].y - enemies[i].h / 2 > H()) {
           enemies.splice(i, 1);
           score += 1;
           if (score % 5 === 0) baseSpeed += 0.35;
@@ -359,7 +423,7 @@
 
     function draw() {
       drawRoad();
-      drawCar(player.x, player.y, "#2563eb", "OSMAN", true);
+      drawCar(player.x, player.y(), "#2563eb", "OSMAN", true);
       enemies.forEach(e => drawCar(e.x, e.y, e.color));
     }
 
@@ -370,9 +434,8 @@
 
       if (gameRunning) {
         update(dt);
-        draw();
       }
-
+      draw();
       requestAnimationFrame(loop);
     }
 
@@ -381,8 +444,16 @@
       if (e.key === "ArrowRight") moveRight();
     });
 
-    leftBtn.addEventListener("touchstart", (e) => { e.preventDefault(); moveLeft(); }, { passive: false });
-    rightBtn.addEventListener("touchstart", (e) => { e.preventDefault(); moveRight(); }, { passive: false });
+    leftBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      moveLeft();
+    }, { passive: false });
+
+    rightBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      moveRight();
+    }, { passive: false });
+
     leftBtn.addEventListener("click", moveLeft);
     rightBtn.addEventListener("click", moveRight);
 
