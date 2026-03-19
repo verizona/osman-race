@@ -699,6 +699,33 @@
       update(dt);
       draw();
       requestAnimationFrame(loop);
+      // ✅ SWIPE CONTROL
+let touchStartX = 0;
+let touchEndX = 0;
+
+canvas.addEventListener("touchstart", (e) => {
+  touchStartX = e.changedTouches[0].screenX;
+}, { passive: true });
+
+canvas.addEventListener("touchend", (e) => {
+  touchEndX = e.changedTouches[0].screenX;
+  handleSwipe();
+}, { passive: true });
+
+function handleSwipe() {
+  const diff = touchEndX - touchStartX;
+
+  // minimum swipe distance
+  if (Math.abs(diff) < 30) return;
+
+  if (diff > 0) {
+    // 👉 swipe right
+    moveRight();
+  } else {
+    // 👉 swipe left
+    moveLeft();
+  }
+}
     }
 
     document.addEventListener("keydown", (e) => {
