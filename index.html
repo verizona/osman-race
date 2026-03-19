@@ -699,35 +699,55 @@
       update(dt);
       draw();
       requestAnimationFrame(loop);
-      // ✅ SWIPE CONTROL
-let touchStartX = 0;
-let touchEndX = 0;
+      // ✅ BETTER SWIPE CONTROL
+let swipeStartX = 0;
+let swipeStartY = 0;
+let swipeActive = false;
+let swipeTriggered = false;
+
+const SWIPE_THRESHOLD = 24;   // how far finger must move
+const VERTICAL_LIMIT = 45;    // ignore if too vertical
 
 canvas.addEventListener("touchstart", (e) => {
-  touchStartX = e.changedTouches[0].screenX;
+  if (!gameRunning) return;
+
+  const t = e.touches[0];
+  swipeStartX = t.clientX;
+  swipeStartY = t.clientY;
+  swipeActive = true;
+  swipeTriggered = false;
 }, { passive: true });
 
-canvas.addEventListener("touchend", (e) => {
-  touchEndX = e.changedTouches[0].screenX;
-  handleSwipe();
-}, { passive: true });
+canvas.addEventListener("touchmove", (e) => {
+  if (!swipeActive || swipeTriggered || !gameRunning) return;
 
-function handleSwipe() {
-  const diff = touchEndX - touchStartX;
+  const t = e.touches[0];
+  const dx = t.clientX - swipeStartX;
+  const dy = t.clientY - swipeStartY;
 
-  // minimum swipe distance
-  if (Math.abs(diff) < 30) return;
-
-  if (diff > 0) {
-    // 👉 swipe right
-    moveRight();
-  } else {
-    // 👉 swipe left
-    moveLeft();
+  // Ignore mostly vertical movement
+  if (Math.abs(dy) > VERTICAL_LIMIT && Math.abs(dy) > Math.abs(dx)) {
+    return;
   }
-}
-    }
 
+  if (dx <= -SWIPE_THRESHOLD) {
+    moveLeft();
+    swipeTriggered = true;
+  } else if (dx >= SWIPE_THRESHOLD) {
+    moveRight();
+    swipeTriggered = true;
+  }
+}, { passive: true });
+
+canvas.addEventListener("touchend", () => {
+  swipeActive = false;
+  swipeTriggered = false;
+}, { passive: true });
+
+canvas.addEventListener("touchcancel", () => {
+  swipeActive = false;
+  swipeTriggered = false;
+}, { passive: true });
     document.addEventListener("keydown", (e) => {
       unlockAudio();
       if (e.key === "ArrowLeft") moveLeft();
