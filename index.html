@@ -227,10 +227,81 @@
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+    let engineMasterGain = null;
+    let engineOsc1 = null;
+    let engineOsc2 = null;
+    let engineFilter = null;
+    let engineLfo = null;
+    let engineLfoGain = null;
+    let engineStarted = false;
+
     function unlockAudio() {
       if (audioCtx.state === "suspended") {
         audioCtx.resume();
       }
+      if (!engineStarted) {
+        startEngineAudio();
+      }
+    }
+
+    function startEngineAudio() {
+      engineMasterGain = audioCtx.createGain();
+      engineMasterGain.gain.value = 0.0001;
+
+      engineFilter = audioCtx.createBiquadFilter();
+      engineFilter.type = "lowpass";
+      engineFilter.frequency.value = 900;
+
+      engineOsc1 = audioCtx.createOscillator();
+      engineOsc1.type = "sawtooth";
+      engineOsc1.frequency.value = 70;
+
+      engineOsc2 = audioCtx.createOscillator();
+      engineOsc2.type = "triangle";
+      engineOsc2.frequency.value = 35;
+
+      engineLfo = audioCtx.createOscillator();
+      engineLfo.type = "sine";
+      engineLfo.frequency.value = 11;
+
+      engineLfoGain = audioCtx.createGain();
+      engineLfoGain.gain.value = 6;
+
+      engineLfo.connect(engineLfoGain);
+      engineLfoGain.connect(engineOsc1.frequency);
+
+      engineOsc1.connect(engineFilter);
+      engineOsc2.connect(engineFilter);
+      engineFilter.connect(engineMasterGain);
+      engineMasterGain.connect(audioCtx.destination);
+
+      engineOsc1.start();
+      engineOsc2.start();
+      engineLfo.start();
+
+      engineStarted = true;
+    }
+
+    function setEngineSound(running, speedValue) {
+      if (!engineStarted) return;
+
+      const now = audioCtx.currentTime;
+
+      if (!running) {
+        engineMasterGain.gain.cancelScheduledValues(now);
+        engineMasterGain.gain.setTargetAtTime(0.0001, now, 0.12);
+        return;
+      }
+
+      const pitch = 65 + (speedValue - 5) * 11;
+      const pitch2 = 32 + (speedValue - 5) * 5.5;
+      const gain = Math.min(0.09, 0.045 + (speedValue - 5) * 0.005);
+      const filterFreq = Math.min(1600, 850 + (speedValue - 5) * 120);
+
+      engineOsc1.frequency.setTargetAtTime(pitch, now, 0.08);
+      engineOsc2.frequency.setTargetAtTime(pitch2, now, 0.08);
+      engineFilter.frequency.setTargetAtTime(filterFreq, now, 0.08);
+      engineMasterGain.gain.setTargetAtTime(gain, now, 0.12);
     }
 
     function playBoomSound() {
@@ -315,6 +386,7 @@
       scoreEl.textContent = "Score: 0";
       speedEl.textContent = "Speed: 1";
       gameOverOverlay.classList.add("hidden");
+      setEngineSound(true, baseSpeed);
     }
 
     function moveLeft() {
@@ -476,6 +548,7 @@
     function endGame(crashX, crashY) {
       if (gameOverPending) return;
       gameRunning = false;
+      setEngineSound(false, baseSpeed);
       gameOverPending = true;
       createExplosion(crashX, crashY);
     }
@@ -595,6 +668,8 @@
           }
         }
 
+        setEngineSound(true, baseSpeed);
+
         scoreEl.textContent = `Score: ${score}`;
         speedEl.textContent = `Speed: ${Math.max(1, Math.round(baseSpeed - 4))}`;
       }
@@ -627,6 +702,7 @@
     }
 
     document.addEventListener("keydown", (e) => {
+      unlockAudio();
       if (e.key === "ArrowLeft") moveLeft();
       if (e.key === "ArrowRight") moveRight();
     });
