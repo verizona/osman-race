@@ -10,10 +10,12 @@
   <style>
     :root {
       --bg: #08111f;
-      --panel: rgba(10, 18, 34, 0.9);
+      --panel: rgba(10, 18, 34, 0.92);
       --text: #ffffff;
       --muted: #d1d5db;
-      --btn: #3b82f6;
+      --btn: #2563eb;
+      --btn2: rgba(17, 24, 39, 0.9);
+      --nitro: #ff6a00;
     }
 
     * {
@@ -60,12 +62,47 @@
       right: 10px;
       display: flex;
       justify-content: space-between;
+      gap: 8px;
       color: white;
       font-weight: bold;
       z-index: 10;
       pointer-events: none;
       text-shadow: 0 2px 4px rgba(0,0,0,.6);
       font-size: 18px;
+    }
+
+    .hud-left, .hud-right {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .top-buttons {
+      position: absolute;
+      top: 70px;
+      right: 10px;
+      z-index: 16;
+      display: flex;
+      gap: 8px;
+    }
+
+    .mini-btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+      background: var(--btn2);
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+
+    .mini-btn.active-sound {
+      background: #14532d;
+    }
+
+    .mini-btn.muted-sound {
+      background: #7f1d1d;
     }
 
     .overlay {
@@ -121,23 +158,44 @@
       right: 0;
       display: flex;
       justify-content: center;
-      gap: 18px;
+      align-items: center;
+      gap: 14px;
       z-index: 15;
+      padding: 0 12px;
       padding-bottom: env(safe-area-inset-bottom, 0);
     }
 
     .ctrl {
-      width: 84px;
-      height: 84px;
+      width: 82px;
+      height: 82px;
       border-radius: 50%;
       border: 0;
       font-size: 32px;
       font-weight: bold;
       color: white;
-      background: rgba(17, 24, 39, 0.88);
+      background: rgba(17, 24, 39, 0.9);
       box-shadow: 0 6px 20px rgba(0,0,0,.25);
       user-select: none;
       -webkit-user-select: none;
+    }
+
+    .nitro-btn {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      border: 0;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+      background: radial-gradient(circle at 35% 30%, #ffb366, var(--nitro) 55%, #b91c1c 100%);
+      box-shadow: 0 6px 20px rgba(0,0,0,.3);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .nitro-btn:disabled {
+      filter: grayscale(0.7);
+      opacity: 0.6;
     }
 
     .hidden {
@@ -148,14 +206,25 @@
 <body>
   <div id="gameWrap">
     <div class="hud">
-      <div id="score">Score: 0</div>
-      <div id="speed">Speed: 1</div>
+      <div class="hud-left">
+        <div id="score">Score: 0</div>
+        <div id="speed">Speed: 1</div>
+      </div>
+      <div class="hud-right">
+        <div id="nitroStatus">Nitro: Ready</div>
+        <div id="soundStatus">Sound: On</div>
+      </div>
+    </div>
+
+    <div class="top-buttons">
+      <button class="mini-btn active-sound" id="soundBtn">🔊 Sound</button>
     </div>
 
     <canvas id="game"></canvas>
 
     <div class="controls">
       <button class="ctrl" id="leftBtn">◀</button>
+      <button class="nitro-btn" id="nitroBtn">NITRO</button>
       <button class="ctrl" id="rightBtn">▶</button>
     </div>
 
@@ -163,8 +232,8 @@
       <div class="panel">
         <h1>OSMAN RACE</h1>
         <p>Desktop: use left/right arrow keys</p>
-        <p>Phone: use the buttons at the bottom</p>
-        <p>Avoid traffic and survive as long as you can.</p>
+        <p>Phone: use swipe or the buttons below</p>
+        <p>Tap NITRO for a speed burst. Avoid traffic and survive.</p>
         <button class="btn" id="startBtn">Start Game</button>
       </div>
     </div>
@@ -185,6 +254,10 @@
     const wrap = document.getElementById("gameWrap");
     const scoreEl = document.getElementById("score");
     const speedEl = document.getElementById("speed");
+    const nitroStatusEl = document.getElementById("nitroStatus");
+    const soundStatusEl = document.getElementById("soundStatus");
+    const soundBtn = document.getElementById("soundBtn");
+
     const startOverlay = document.getElementById("startOverlay");
     const gameOverOverlay = document.getElementById("gameOverOverlay");
     const finalScoreEl = document.getElementById("finalScore");
@@ -192,6 +265,7 @@
     const restartBtn = document.getElementById("restartBtn");
     const leftBtn = document.getElementById("leftBtn");
     const rightBtn = document.getElementById("rightBtn");
+    const nitroBtn = document.getElementById("nitroBtn");
 
     const BASE_W = 420;
     const BASE_H = 740;
@@ -225,6 +299,15 @@
     let explosion = null;
     let flashAlpha = 0;
 
+    let soundEnabled = true;
+
+    let nitroActive = false;
+    let nitroTimeLeft = 0;
+    let nitroCooldown = 0;
+    const NITRO_DURATION = 1.8;
+    const NITRO_COOLDOWN = 6.0;
+    const NITRO_BOOST = 5.5;
+
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     let engineMasterGain = null;
@@ -236,6 +319,7 @@
     let engineStarted = false;
 
     function unlockAudio() {
+      if (!soundEnabled) return;
       if (audioCtx.state === "suspended") {
         audioCtx.resume();
       }
@@ -283,7 +367,7 @@
     }
 
     function setEngineSound(running, speedValue) {
-      if (!engineStarted) return;
+      if (!engineStarted || !soundEnabled) return;
 
       const now = audioCtx.currentTime;
 
@@ -295,8 +379,8 @@
 
       const pitch = 65 + (speedValue - 5) * 11;
       const pitch2 = 32 + (speedValue - 5) * 5.5;
-      const gain = Math.min(0.09, 0.045 + (speedValue - 5) * 0.005);
-      const filterFreq = Math.min(1600, 850 + (speedValue - 5) * 120);
+      const gain = Math.min(0.11, 0.045 + (speedValue - 5) * 0.006);
+      const filterFreq = Math.min(1800, 850 + (speedValue - 5) * 130);
 
       engineOsc1.frequency.setTargetAtTime(pitch, now, 0.08);
       engineOsc2.frequency.setTargetAtTime(pitch2, now, 0.08);
@@ -304,7 +388,14 @@
       engineMasterGain.gain.setTargetAtTime(gain, now, 0.12);
     }
 
+    function stopEngineSound() {
+      if (!engineStarted) return;
+      const now = audioCtx.currentTime;
+      engineMasterGain.gain.setTargetAtTime(0.0001, now, 0.08);
+    }
+
     function playBoomSound() {
+      if (!soundEnabled) return;
       unlockAudio();
 
       const now = audioCtx.currentTime;
@@ -350,6 +441,37 @@
       noise.stop(now + 0.46);
     }
 
+    function playNitroSound() {
+      if (!soundEnabled) return;
+      unlockAudio();
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+
+      osc.type = "square";
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(620, now + 0.22);
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1200, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+      osc.connect(filter).connect(gain).connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }
+
+    function vibrateCrash() {
+      if ("vibrate" in navigator) {
+        navigator.vibrate([120, 60, 180]);
+      }
+    }
+
     function scaleX(v) {
       return v * (W() / BASE_W);
     }
@@ -365,10 +487,31 @@
     const player = {
       lane: 1,
       x: laneCenter(1),
+      targetX: laneCenter(1),
       y: () => H() - scaleY(120),
       w: () => scaleX(56),
       h: () => scaleY(96)
     };
+
+    function updateSoundUI() {
+      soundStatusEl.textContent = soundEnabled ? "Sound: On" : "Sound: Off";
+      soundBtn.textContent = soundEnabled ? "🔊 Sound" : "🔇 Muted";
+      soundBtn.classList.toggle("active-sound", soundEnabled);
+      soundBtn.classList.toggle("muted-sound", !soundEnabled);
+    }
+
+    function updateNitroUI() {
+      if (nitroActive) {
+        nitroStatusEl.textContent = `Nitro: ${nitroTimeLeft.toFixed(1)}s`;
+        nitroBtn.disabled = true;
+      } else if (nitroCooldown > 0) {
+        nitroStatusEl.textContent = `Nitro CD: ${nitroCooldown.toFixed(1)}s`;
+        nitroBtn.disabled = true;
+      } else {
+        nitroStatusEl.textContent = "Nitro: Ready";
+        nitroBtn.disabled = false;
+      }
+    }
 
     function resetGame() {
       gameRunning = true;
@@ -381,19 +524,32 @@
       particles = [];
       explosion = null;
       flashAlpha = 0;
+      nitroActive = false;
+      nitroTimeLeft = 0;
+      nitroCooldown = 0;
+
       player.lane = 1;
       player.x = laneCenter(1);
+      player.targetX = laneCenter(1);
+
       scoreEl.textContent = "Score: 0";
       speedEl.textContent = "Speed: 1";
+      updateNitroUI();
+      updateSoundUI();
+
       gameOverOverlay.classList.add("hidden");
-      setEngineSound(true, baseSpeed);
+
+      if (soundEnabled) {
+        unlockAudio();
+        setEngineSound(true, baseSpeed);
+      }
     }
 
     function moveLeft() {
       if (!gameRunning) return;
       if (player.lane > 0) {
         player.lane -= 1;
-        player.x = laneCenter(player.lane);
+        player.targetX = laneCenter(player.lane);
       }
     }
 
@@ -401,18 +557,34 @@
       if (!gameRunning) return;
       if (player.lane < laneCount() - 1) {
         player.lane += 1;
-        player.x = laneCenter(player.lane);
+        player.targetX = laneCenter(player.lane);
       }
     }
 
-    function drawRoad() {
+    function activateNitro() {
+      if (!gameRunning) return;
+      if (nitroActive || nitroCooldown > 0) return;
+
+      nitroActive = true;
+      nitroTimeLeft = NITRO_DURATION;
+      nitroCooldown = NITRO_COOLDOWN;
+      playNitroSound();
+
+      if ("vibrate" in navigator) {
+        navigator.vibrate(40);
+      }
+
+      updateNitroUI();
+    }
+
+    function drawRoad(currentSpeed) {
       ctx.clearRect(0, 0, W(), H());
 
-      ctx.fillStyle = "#4ade80";
+      ctx.fillStyle = nitroActive ? "#22c55e" : "#4ade80";
       ctx.fillRect(0, 0, roadX(), H());
       ctx.fillRect(roadX() + roadW(), 0, W() - (roadX() + roadW()), H());
 
-      ctx.fillStyle = "#31323a";
+      ctx.fillStyle = nitroActive ? "#23242b" : "#31323a";
       ctx.fillRect(roadX(), 0, roadW(), H());
 
       ctx.strokeStyle = "#e5e7eb";
@@ -424,11 +596,20 @@
       ctx.lineTo(roadX() + roadW(), H());
       ctx.stroke();
 
-      ctx.fillStyle = "#b59f2e";
+      ctx.fillStyle = nitroActive ? "#fff07a" : "#b59f2e";
       for (let lane = 1; lane < laneCount(); lane++) {
         const x = roadX() + lane * laneW() - scaleX(3);
         for (let y = -roadOffset; y < H(); y += scaleY(70)) {
           ctx.fillRect(x, y, scaleX(6), scaleY(42));
+        }
+      }
+
+      if (nitroActive) {
+        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        for (let i = 0; i < 8; i++) {
+          const streakX = roadX() + Math.random() * roadW();
+          const streakY = Math.random() * H();
+          ctx.fillRect(streakX, streakY, scaleX(2), scaleY(22 + Math.random() * 30));
         }
       }
     }
@@ -484,6 +665,17 @@
       circle(left + scaleX(12), top + h - scaleY(10), scaleX(5));
       circle(left + w - scaleX(12), top + h - scaleY(10), scaleX(5));
 
+      if (isPlayer && nitroActive) {
+        const flameY = top + h + scaleY(6);
+        ctx.fillStyle = "#ffcc33";
+        circle(x - scaleX(10), flameY, scaleX(5));
+        circle(x + scaleX(10), flameY, scaleX(5));
+
+        ctx.fillStyle = "#ff5a00";
+        circle(x - scaleX(10), flameY + scaleY(6), scaleX(8));
+        circle(x + scaleX(10), flameY + scaleY(6), scaleX(8));
+      }
+
       if (label) {
         ctx.fillStyle = "#ffffff";
         ctx.font = `bold ${Math.max(12, Math.floor(scaleX(18)))}px Arial`;
@@ -492,7 +684,7 @@
       }
     }
 
-    function spawnEnemy() {
+    function spawnEnemy(currentSpeed) {
       const lane = Math.floor(Math.random() * laneCount());
       enemies.push({
         lane,
@@ -500,7 +692,7 @@
         y: -scaleY(110),
         w: scaleX(56),
         h: scaleY(96),
-        speed: baseSpeed + 2 + Math.random() * 1.5,
+        speed: currentSpeed + 1.5 + Math.random() * 1.8,
         color: ["#ef4444", "#f97316", "#8b5cf6", "#06b6d4"][Math.floor(Math.random() * 4)]
       });
     }
@@ -543,12 +735,16 @@
 
       flashAlpha = 0.85;
       playBoomSound();
+      vibrateCrash();
     }
 
     function endGame(crashX, crashY) {
       if (gameOverPending) return;
       gameRunning = false;
-      setEngineSound(false, baseSpeed);
+      nitroActive = false;
+      nitroTimeLeft = 0;
+      updateNitroUI();
+      stopEngineSound();
       gameOverPending = true;
       createExplosion(crashX, crashY);
     }
@@ -638,12 +834,37 @@
       const dtSeconds = dt / 1000;
 
       if (gameRunning) {
-        roadOffset = (roadOffset + baseSpeed) % scaleY(70);
+        if (nitroActive) {
+          nitroTimeLeft -= dtSeconds;
+          if (nitroTimeLeft <= 0) {
+            nitroActive = false;
+            nitroTimeLeft = 0;
+          }
+        }
+
+        if (nitroCooldown > 0) {
+          nitroCooldown -= dtSeconds;
+          if (nitroCooldown < 0) nitroCooldown = 0;
+        }
+
+        const currentSpeed = baseSpeed + (nitroActive ? NITRO_BOOST : 0);
+
+        roadOffset = (roadOffset + currentSpeed) % scaleY(70);
         spawnTimer += dt;
 
-        if (spawnTimer > Math.max(420, 950 - score * 7)) {
+        const moveEase = nitroActive ? 0.28 : 0.22;
+        player.x += (player.targetX - player.x) * moveEase;
+        if (Math.abs(player.targetX - player.x) < 0.5) {
+          player.x = player.targetX;
+        }
+
+        const spawnThreshold = nitroActive
+          ? Math.max(260, 750 - score * 7)
+          : Math.max(420, 950 - score * 7);
+
+        if (spawnTimer > spawnThreshold) {
           spawnTimer = 0;
-          if (enemies.length < 7) spawnEnemy();
+          if (enemies.length < 8) spawnEnemy(currentSpeed);
         }
 
         const playerBox = {
@@ -654,7 +875,7 @@
         };
 
         for (let i = enemies.length - 1; i >= 0; i--) {
-          enemies[i].y += enemies[i].speed;
+          enemies[i].y += enemies[i].speed + (nitroActive ? 1.2 : 0);
 
           if (rectsCollide(playerBox, enemies[i])) {
             endGame(player.x, player.y());
@@ -663,15 +884,19 @@
 
           if (enemies[i].y - enemies[i].h / 2 > H()) {
             enemies.splice(i, 1);
-            score += 1;
+            score += nitroActive ? 2 : 1;
             if (score % 5 === 0) baseSpeed += 0.35;
           }
         }
 
-        setEngineSound(true, baseSpeed);
+        if (soundEnabled) {
+          unlockAudio();
+          setEngineSound(true, currentSpeed);
+        }
 
         scoreEl.textContent = `Score: ${score}`;
-        speedEl.textContent = `Speed: ${Math.max(1, Math.round(baseSpeed - 4))}`;
+        speedEl.textContent = `Speed: ${Math.max(1, Math.round(currentSpeed - 4))}`;
+        updateNitroUI();
       }
 
       if (explosion || particles.length > 0 || flashAlpha > 0) {
@@ -680,12 +905,13 @@
     }
 
     function draw() {
-      drawRoad();
+      const currentSpeed = baseSpeed + (nitroActive ? NITRO_BOOST : 0);
+      drawRoad(currentSpeed);
 
       enemies.forEach(e => drawCar(e.x, e.y, e.color));
 
       if (!explosion) {
-        drawCar(player.x, player.y(), "#2563eb", "OSMAN", true);
+        drawCar(player.x, player.y(), nitroActive ? "#1d4ed8" : "#2563eb", "OSMAN", true);
       }
 
       drawExplosion();
@@ -699,59 +925,27 @@
       update(dt);
       draw();
       requestAnimationFrame(loop);
-      // ✅ BETTER SWIPE CONTROL
-let swipeStartX = 0;
-let swipeStartY = 0;
-let swipeActive = false;
-let swipeTriggered = false;
+    }
 
-const SWIPE_THRESHOLD = 24;   // how far finger must move
-const VERTICAL_LIMIT = 45;    // ignore if too vertical
-
-canvas.addEventListener("touchstart", (e) => {
-  if (!gameRunning) return;
-
-  const t = e.touches[0];
-  swipeStartX = t.clientX;
-  swipeStartY = t.clientY;
-  swipeActive = true;
-  swipeTriggered = false;
-}, { passive: true });
-
-canvas.addEventListener("touchmove", (e) => {
-  if (!swipeActive || swipeTriggered || !gameRunning) return;
-
-  const t = e.touches[0];
-  const dx = t.clientX - swipeStartX;
-  const dy = t.clientY - swipeStartY;
-
-  // Ignore mostly vertical movement
-  if (Math.abs(dy) > VERTICAL_LIMIT && Math.abs(dy) > Math.abs(dx)) {
-    return;
-  }
-
-  if (dx <= -SWIPE_THRESHOLD) {
-    moveLeft();
-    swipeTriggered = true;
-  } else if (dx >= SWIPE_THRESHOLD) {
-    moveRight();
-    swipeTriggered = true;
-  }
-}, { passive: true });
-
-canvas.addEventListener("touchend", () => {
-  swipeActive = false;
-  swipeTriggered = false;
-}, { passive: true });
-
-canvas.addEventListener("touchcancel", () => {
-  swipeActive = false;
-  swipeTriggered = false;
-}, { passive: true });
     document.addEventListener("keydown", (e) => {
-      unlockAudio();
-      if (e.key === "ArrowLeft") moveLeft();
-      if (e.key === "ArrowRight") moveRight();
+      if (e.key === "ArrowLeft") {
+        unlockAudio();
+        moveLeft();
+      }
+      if (e.key === "ArrowRight") {
+        unlockAudio();
+        moveRight();
+      }
+      if (e.key === " " || e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        unlockAudio();
+        activateNitro();
+      }
+      if (e.key.toLowerCase() === "m") {
+        soundEnabled = !soundEnabled;
+        if (!soundEnabled) stopEngineSound();
+        updateSoundUI();
+      }
     });
 
     leftBtn.addEventListener("touchstart", (e) => {
@@ -766,6 +960,12 @@ canvas.addEventListener("touchcancel", () => {
       moveRight();
     }, { passive: false });
 
+    nitroBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      unlockAudio();
+      activateNitro();
+    }, { passive: false });
+
     leftBtn.addEventListener("click", () => {
       unlockAudio();
       moveLeft();
@@ -776,17 +976,85 @@ canvas.addEventListener("touchcancel", () => {
       moveRight();
     });
 
-    startBtn.addEventListener("click", () => {
+    nitroBtn.addEventListener("click", () => {
       unlockAudio();
+      activateNitro();
+    });
+
+    soundBtn.addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled) {
+        stopEngineSound();
+      } else if (gameRunning) {
+        unlockAudio();
+        setEngineSound(true, baseSpeed + (nitroActive ? NITRO_BOOST : 0));
+      }
+      updateSoundUI();
+    });
+
+    startBtn.addEventListener("click", () => {
+      if (soundEnabled) unlockAudio();
       startOverlay.classList.add("hidden");
       resetGame();
     });
 
     restartBtn.addEventListener("click", () => {
-      unlockAudio();
+      if (soundEnabled) unlockAudio();
       resetGame();
     });
 
+    // Better swipe
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swipeActive = false;
+    let swipeTriggered = false;
+
+    const SWIPE_THRESHOLD = 24;
+    const VERTICAL_LIMIT = 45;
+
+    canvas.addEventListener("touchstart", (e) => {
+      if (!gameRunning) return;
+      const t = e.touches[0];
+      swipeStartX = t.clientX;
+      swipeStartY = t.clientY;
+      swipeActive = true;
+      swipeTriggered = false;
+    }, { passive: true });
+
+    canvas.addEventListener("touchmove", (e) => {
+      if (!swipeActive || swipeTriggered || !gameRunning) return;
+
+      const t = e.touches[0];
+      const dx = t.clientX - swipeStartX;
+      const dy = t.clientY - swipeStartY;
+
+      if (Math.abs(dy) > VERTICAL_LIMIT && Math.abs(dy) > Math.abs(dx)) {
+        return;
+      }
+
+      if (dx <= -SWIPE_THRESHOLD) {
+        unlockAudio();
+        moveLeft();
+        swipeTriggered = true;
+      } else if (dx >= SWIPE_THRESHOLD) {
+        unlockAudio();
+        moveRight();
+        swipeTriggered = true;
+      }
+    }, { passive: true });
+
+    canvas.addEventListener("touchend", () => {
+      swipeActive = false;
+      swipeTriggered = false;
+    }, { passive: true });
+
+    canvas.addEventListener("touchcancel", () => {
+      swipeActive = false;
+      swipeTriggered = false;
+    }, { passive: true });
+
+    updateSoundUI();
+    updateNitroUI();
     draw();
     requestAnimationFrame(loop);
   </script>
